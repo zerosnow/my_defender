@@ -1,12 +1,16 @@
-#include "linux/kernel.h"
-#include "linux/module.h"
-#include "linux/fs.h"
-#include "linux/init.h"
-#include "linux/types.h"
-#include "linux/errno.h"
-#include "linux/uaccess.h"
-#include "linux/kdev_t.h"
-#include "linux/slab.h"
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/init.h>
+#include <linux/types.h>
+#include <linux/errno.h>
+#include <linux/uaccess.h>
+#include <linux/kdev_t.h>
+#include <linux/slab.h>
+#include <linux/version.h>
+#include <linux/skbuff.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
 #include "defender.h"
 
 MODULE_LICENSE("GPL");
@@ -17,10 +21,15 @@ static int my_release(struct inode *inode, struct file *file);
 static ssize_t my_read(struct file *file, char __user *user, size_t t, loff_t *f);
 static ssize_t my_write(struct file *file, const char __user *user, size_t t, loff_t *f);
 
+//用于与内核交互的静态变量
 static struct rule *rules_head;
 static int device_num = 0;
 static int mutex = 0;//互斥用
 static char *devName = "myDevice";
+
+//用于与netfilter的静态变量
+static struct nf_hook_ops nfho_local_in;
+static struct nf_hook_ops nfho_local_out;
 
 struct file_operations pStruct = {
 	.owner = THIS_MODULE,
@@ -29,6 +38,34 @@ struct file_operations pStruct = {
 	.read = my_read,
 	.write = my_write,
 };
+
+unsigned int hook_local_in(unsigned int hooknum,
+		struct sk_buff **skb, 
+		const struct net_device *in, 
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *)) 
+{
+	struct rule *cur_rule = rules_head;
+	printk("in\n");
+	while(cur_rule != NULL) {
+		cur_rule = cur_rule->next;
+	}
+	return NF_ACCEPT;
+}
+
+unsigned int hook_local_out(unsigned int hooknum,
+		struct sk_buff **skb, 
+		const struct net_device *in, 
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *)) 
+{
+	struct rule *cur_rule = rules_head;
+	printk("out\n");
+	while(cur_rule != NULL) {
+		cur_rule = cur_rule->next;
+	}
+	return NF_ACCEPT;
+}
 
 //register module
 static int kexec_test_init(void)
@@ -43,18 +80,30 @@ static int kexec_test_init(void)
 	printk("the device has been registered!\n");
 	device_num = ret;
 	printk("the virtual device's major number %d.\n", device_num);
-	printk("Or you can see it by using\n");
-	printk(" ------more /proc/devices-------\n");
-	printk("To talk to the driver, create a dev file with\n");
-	printk(" mknod /dev/myDevice c %d 0 \n", device_num);
-	printk("Use \"rmmod\" to remove the module\n");
-	return 0;
 
+	nfho_local_in.hook = hook_local_in;
+	nfho_local_in.owner = NULL;
+	nfho_local_in.pf = PF_INET;
+	nfho_local_in.hooknum = NF_INET_LOCAL_IN;
+	nfho_local_in.priority = NF_IP_PRI_FIRST;
+
+	nfho_local_out.hook = hook_local_out;
+	nfho_local_out.owner = NULL;
+	nfho_local_out.pf = PF_INET;
+	nfho_local_out.hooknum = NF_INET_LOCAL_OUT;
+	nfho_local_out.priority = NF_IP_PRI_FIRST;
+
+	nf_register_hook(&nfho_local_in);
+	nf_register_hook(&nfho_local_out);
+	printk("nf registered!\n");
+	return 0;
 }
 
 static void kexec_test_exit(void)
 {
 	unregister_chrdev(device_num, devName);
+	nf_unregister_hook(&nfho_local_in);
+	nf_unregister_hook(&nfho_local_out);
 	printk("unregister success!\n");
 }
 
