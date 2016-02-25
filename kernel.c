@@ -10,6 +10,8 @@
 #include <linux/version.h>
 #include <linux/skbuff.h>
 #include <linux/netfilter.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
 #include <linux/netfilter_ipv4.h>
 #include "defender.h"
 
@@ -39,32 +41,127 @@ struct file_operations pStruct = {
 	.write = my_write,
 };
 
+//将字符ip转换为数字
+unsigned int inet_addr(char *str) {
+	int a, b, c, d;
+	char arr[4];
+	sscanf(str, "%d.%d.%d.%d", &a, &b, &c, &d);
+	arr[0] = a; arr[1] = b; arr[2] = c; arr[3] = d;
+	return *(unsigned int *)arr;
+}
+
+//查找子网掩码，如果有则将ip填入ip串，返回子网掩码，如果没有则返回负一
+int mask_find(const char *str, char *ip) {
+	int i = 0;
+	int mask = 0;
+	while(str[i] != '\0') {
+		if (str[i] == '/') {
+			ip[i] = '\0';
+			while(str[++i] != '\0') {
+				mask = mask*10 + str[i] - '0';
+			}
+			return mask;
+		}
+		ip[i] = str[i];
+		i++;
+	}
+	return -1;
+}
+
+//检查skb中的ip是否在规则ip段中或与规则ip相等
+bool check_ip_packet(struct sk_buff *skb, const char *source_ip, const char *dest_ip) {
+	char source_sip[16], dest_sip[16];
+	int source_mask, dest_mask;
+	if (source_ip[0] != '0') {
+		if ((source_mask = mask_find(source_ip, source_sip)) != -1) {//存在子网掩码
+			printk("source:%x, %x, %s\n", ip_hdr(skb)->saddr, inet_addr(source_sip), (dest_ip));
+			if ((ip_hdr(skb)->saddr & (~((~0)<<source_mask))) != inet_addr(source_sip)) 
+				return false;
+		}
+		else {//不存在子网掩码
+			if (ip_hdr(skb)->saddr != inet_addr(source_sip)) {
+				return false;
+			}
+		}
+	}
+	if (dest_ip[0] != '0') {
+		if ((dest_mask = mask_find(dest_ip, dest_sip)) != -1) {//存在子网掩码
+			printk("dest:%x, %x, %d\n", ip_hdr(skb)->daddr & (~((~0)<<dest_mask)), inet_addr(dest_sip), dest_mask);
+			if ((ip_hdr(skb)->daddr & (~((~0)<<dest_mask))) != inet_addr(dest_sip)) 
+				return false;
+		}
+		else {//不存在子网掩码
+			if (ip_hdr(skb)->daddr != inet_addr(dest_sip)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+//是tcp协议返回真，否则返回假
+bool check_tcp(struct sk_buff *skb, int protocol) {
+	if (!ip_hdr(skb)) return false;
+	if (protocol == PROTOCOL_TCP && ip_hdr(skb)->protocol != IPPROTO_TCP) return false;
+	return true;
+}
+
+//检查skb中的port是否与规则port相等
+bool check_port(struct sk_buff *skb, int source_port, int dest_port) {
+	struct tcphdr *thead;
+	if (!(ip_hdr(skb))) return false;
+	thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
+	if (source_port !=0 && thead->source != source_port) return false;
+	if (dest_port !=0 && thead->dest != dest_port) return false;
+	return true;
+}
+
+
+
 unsigned int hook_local_in(unsigned int hooknum,
-		struct sk_buff **skb, 
+		struct sk_buff *skb, 
 		const struct net_device *in, 
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *)) 
 {
 	struct rule *cur_rule = rules_head;
-	printk("in\n");
+	if (!skb) return NF_DROP;
 	while(cur_rule != NULL) {
+		if (cur_rule->act == ACT_PERMIT) {
+			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
+			 (check_tcp(skb, cur_rule->protocol) == true) &&
+			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_ACCEPT;
+		}else {
+			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
+			 (check_tcp(skb, cur_rule->protocol) == true) &&
+			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_DROP;
+		}
 		cur_rule = cur_rule->next;
 	}
-	return NF_ACCEPT;
+	return NF_DROP;
 }
 
 unsigned int hook_local_out(unsigned int hooknum,
-		struct sk_buff **skb, 
+		struct sk_buff *skb, 
 		const struct net_device *in, 
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *)) 
 {
 	struct rule *cur_rule = rules_head;
-	printk("out\n");
+	if (!skb) return NF_DROP;
 	while(cur_rule != NULL) {
+		if (cur_rule->act == ACT_PERMIT) {
+			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
+			 (check_tcp(skb, cur_rule->protocol) == true) &&
+			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_ACCEPT;
+		}else {
+			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
+			 (check_tcp(skb, cur_rule->protocol) == true) &&
+			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_DROP;
+		}
 		cur_rule = cur_rule->next;
 	}
-	return NF_ACCEPT;
+	return NF_DROP;
 }
 
 //register module

@@ -14,9 +14,9 @@
 
 struct rule {
 	int position;
-	char source_ip[16];
+	char source_ip[20];
 	int source_port;
-	char dest_ip[16];
+	char dest_ip[20];
 	int dest_port;
 	int protocol;
 	int time;
