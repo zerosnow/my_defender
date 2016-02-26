@@ -12,6 +12,8 @@
 #include <linux/netfilter.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/time.h>
+#include <linux/rtc.h>
 #include <linux/netfilter_ipv4.h>
 #include "defender.h"
 
@@ -50,6 +52,11 @@ unsigned int inet_addr(char *str) {
 	return *(unsigned int *)arr;
 }
 
+//short大端小端存储互相转换
+unsigned short translate(unsigned short source) {
+	return ((source<<8) & 0xff00) | ((source>>8) & 0xff);
+}
+
 //查找子网掩码，如果有则将ip填入ip串，返回子网掩码，如果没有则返回负一
 int mask_find(const char *str, char *ip) {
 	int i = 0;
@@ -70,30 +77,28 @@ int mask_find(const char *str, char *ip) {
 
 //检查skb中的ip是否在规则ip段中或与规则ip相等
 bool check_ip_packet(struct sk_buff *skb, const char *source_ip, const char *dest_ip) {
-	char source_sip[16], dest_sip[16];
+	char source_sip[IP_SIZE], dest_sip[IP_SIZE];
 	int source_mask, dest_mask;
-	if (source_ip[0] != '0') {
+	if (strcmp(source_ip, IP_ANY) != 0) {
 		if ((source_mask = mask_find(source_ip, source_sip)) != -1) {//存在子网掩码
-			printk("source:%x, %x, %s\n", ip_hdr(skb)->saddr, inet_addr(source_sip), (dest_ip));
+			//printk("source:%x, %x, %s\n", ip_hdr(skb)->saddr, inet_addr(source_sip), (dest_ip));
 			if ((ip_hdr(skb)->saddr & (~((~0)<<source_mask))) != inet_addr(source_sip)) 
 				return false;
 		}
 		else {//不存在子网掩码
-			if (ip_hdr(skb)->saddr != inet_addr(source_sip)) {
+			if (ip_hdr(skb)->saddr != inet_addr(source_sip))
 				return false;
-			}
 		}
 	}
-	if (dest_ip[0] != '0') {
+	if (strcmp(dest_ip, IP_ANY) != 0) {
 		if ((dest_mask = mask_find(dest_ip, dest_sip)) != -1) {//存在子网掩码
-			printk("dest:%x, %x, %d\n", ip_hdr(skb)->daddr & (~((~0)<<dest_mask)), inet_addr(dest_sip), dest_mask);
+			//printk("dest:%x, %x, %d\n", ip_hdr(skb)->daddr & (~((~0)<<dest_mask)), inet_addr(dest_sip), dest_mask);
 			if ((ip_hdr(skb)->daddr & (~((~0)<<dest_mask))) != inet_addr(dest_sip)) 
 				return false;
 		}
 		else {//不存在子网掩码
-			if (ip_hdr(skb)->daddr != inet_addr(dest_sip)) {
+			if (ip_hdr(skb)->daddr != inet_addr(dest_sip))
 				return false;
-			}
 		}
 	}
 	return true;
@@ -110,38 +115,46 @@ bool check_tcp(struct sk_buff *skb, int protocol) {
 bool check_port(struct sk_buff *skb, int source_port, int dest_port) {
 	struct tcphdr *thead;
 	if (!(ip_hdr(skb))) return false;
+	if (ip_hdr(skb)->protocol != IPPROTO_TCP) return true;
 	thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
-	if (source_port !=0 && thead->source != source_port) return false;
-	if (dest_port !=0 && thead->dest != dest_port) return false;
+	printk("source_port:%d, dest_port:%d, %d, %d\n", translate(thead->source), translate(thead->dest), source_port, dest_port);
+	printk("%x,%x\n", ip_hdr(skb)->saddr, ip_hdr(skb)->daddr);
+	if (source_port !=PORT_ANY && translate(thead->source) != source_port) return false;
+	if (dest_port !=PORT_ANY && translate(thead->dest) != dest_port) return false;
 	return true;
 }
 
-
-
-unsigned int hook_local_in(unsigned int hooknum,
-		struct sk_buff *skb, 
-		const struct net_device *in, 
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *)) 
-{
-	struct rule *cur_rule = rules_head;
-	if (!skb) return NF_DROP;
-	while(cur_rule != NULL) {
-		if (cur_rule->act == ACT_PERMIT) {
-			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
-			 (check_tcp(skb, cur_rule->protocol) == true) &&
-			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_ACCEPT;
-		}else {
-			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
-			 (check_tcp(skb, cur_rule->protocol) == true) &&
-			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_DROP;
+bool check_time(int time_rule) {
+	struct timeval timex;
+	struct rtc_time cur_time;
+	if (time_rule == TIME_WORK) {
+		do_gettimeofday(&timex);
+		rtc_time_to_tm(timex.tv_sec, &cur_time);
+		//printk("%d, %d\n", cur_time.tm_hour, cur_time.tm_min);
+		if (cur_time.tm_hour >= WORK_END - TIME_LAG || cur_time.tm_hour < WORK_BEGIN - TIME_LAG) {
+			printk("now isnot work time!\n");
+			return false;
 		}
-		cur_rule = cur_rule->next;
 	}
-	return NF_DROP;
+	return true;
 }
 
-unsigned int hook_local_out(unsigned int hooknum,
+bool check_interface(const struct net_device *in, const struct net_device *out, char *interface, unsigned int hooknum) {
+	if (strcmp(interface, IF_ANY) == 0)return true;	//表示interface任意
+	switch(hooknum) {
+		case NF_INET_LOCAL_OUT:
+			if (out != NULL && strcmp(out->name, interface) == 0) return true;
+			return false;
+		case NF_INET_LOCAL_IN:
+			if (in != NULL && strcmp(in->name, interface) == 0) return true;
+			return false;
+		default:
+			return true;
+	}
+}
+
+//同时用在本机的入口和出口的钩子函数
+unsigned int hook_local(const struct nf_hook_ops *ops,
 		struct sk_buff *skb, 
 		const struct net_device *in, 
 		const struct net_device *out,
@@ -150,14 +163,13 @@ unsigned int hook_local_out(unsigned int hooknum,
 	struct rule *cur_rule = rules_head;
 	if (!skb) return NF_DROP;
 	while(cur_rule != NULL) {
-		if (cur_rule->act == ACT_PERMIT) {
-			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
+		if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
 			 (check_tcp(skb, cur_rule->protocol) == true) &&
-			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_ACCEPT;
-		}else {
-			if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
-			 (check_tcp(skb, cur_rule->protocol) == true) &&
-			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) ) return NF_DROP;
+			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) &&
+			 (check_time(cur_rule->time_rule) == true) &&
+			 (check_interface(in, out, cur_rule->interface, ops->hooknum) == true) ) {
+			if (cur_rule->act == ACT_PERMIT) return NF_ACCEPT;
+			else return NF_DROP;
 		}
 		cur_rule = cur_rule->next;
 	}
@@ -178,13 +190,13 @@ static int kexec_test_init(void)
 	device_num = ret;
 	printk("the virtual device's major number %d.\n", device_num);
 
-	nfho_local_in.hook = hook_local_in;
+	nfho_local_in.hook = hook_local;
 	nfho_local_in.owner = NULL;
 	nfho_local_in.pf = PF_INET;
 	nfho_local_in.hooknum = NF_INET_LOCAL_IN;
 	nfho_local_in.priority = NF_IP_PRI_FIRST;
 
-	nfho_local_out.hook = hook_local_out;
+	nfho_local_out.hook = hook_local;
 	nfho_local_out.owner = NULL;
 	nfho_local_out.pf = PF_INET;
 	nfho_local_out.hooknum = NF_INET_LOCAL_OUT;
@@ -192,6 +204,7 @@ static int kexec_test_init(void)
 
 	nf_register_hook(&nfho_local_in);
 	nf_register_hook(&nfho_local_out);
+	
 	printk("nf registered!\n");
 	return 0;
 }
