@@ -11,14 +11,14 @@
 #define WORK_END 17
 #define TIME_LAG 8
 
-#define ACT_DEL 0
-#define ACT_REJECT 1
-#define ACT_PERMIT 2
+#define ACT_REJECT 0
+#define ACT_PERMIT 1
+#define ACT_DEL 2
 #define ACT_CLEAR 3
 
 #define  PORT_ANY 0
-#define IP_ANY "\0"
-#define IF_ANY "\0"
+#define IP_ANY "any"
+#define IF_ANY "any"
 
 #define IP_SIZE 16
 #define FULL_IP_SIZE 20

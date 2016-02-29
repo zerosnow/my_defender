@@ -117,8 +117,8 @@ bool check_port(struct sk_buff *skb, int source_port, int dest_port) {
 	if (!(ip_hdr(skb))) return false;
 	if (ip_hdr(skb)->protocol != IPPROTO_TCP) return true;
 	thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
-	printk("source_port:%d, dest_port:%d, %d, %d\n", translate(thead->source), translate(thead->dest), source_port, dest_port);
-	printk("%x,%x\n", ip_hdr(skb)->saddr, ip_hdr(skb)->daddr);
+	//printk("source_port:%d, dest_port:%d, %d, %d\n", translate(thead->source), translate(thead->dest), source_port, dest_port);
+	//printk("%x,%x\n", ip_hdr(skb)->saddr, ip_hdr(skb)->daddr);
 	if (source_port !=PORT_ANY && translate(thead->source) != source_port) return false;
 	if (dest_port !=PORT_ANY && translate(thead->dest) != dest_port) return false;
 	return true;
@@ -279,6 +279,11 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 		}
 		if (position == 0) {
 			rules_head = rules_head->next;
+			temp = cur_rule;
+			while(temp->next != NULL) {
+				temp = temp->next;
+				temp->position--;
+			}
 			kfree(cur_rule);
 		}
 		else {
@@ -292,6 +297,11 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 					break;
 			}
 			pre_cur_rule->next = cur_rule->next;
+			temp = cur_rule;
+			while(temp->next != NULL) {
+				temp = temp->next;
+				temp->position--;
+			}
 			kfree(cur_rule);
 		}
 		return 1;
@@ -328,5 +338,3 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 
 module_init(kexec_test_init);
 module_exit(kexec_test_exit);
-
-
