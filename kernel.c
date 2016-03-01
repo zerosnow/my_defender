@@ -221,14 +221,12 @@ static int my_open(struct inode *inode, struct file *file)
 {
 	if (mutex) return -EBUSY;
 	mutex = 1;//lock
-	printk("open device success!\n");
 	try_module_get(THIS_MODULE);
 	return 0;
 }
 
 static int my_release(struct inode *inode, struct file *file)
 {
-	printk("Device released!\n");
 	module_put(THIS_MODULE);
 	mutex = 0;//unlock
 	return 0;
@@ -276,6 +274,7 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 		if (cur_rule->next == NULL) {
 			rules_head = NULL;
 			kfree(cur_rule);
+			return 1;
 		}
 		if (position == 0) {
 			rules_head = rules_head->next;
@@ -285,6 +284,7 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 				temp->position--;
 			}
 			kfree(cur_rule);
+			return 1;
 		}
 		else {
 			//如果要删除的位置超过了规则数则删除最后一个
@@ -316,16 +316,18 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 	else {
 		//如果要写入的位置超过了规则数则写入最后一个
 		while(position--) {
-			if (cur_rule->next != NULL)
+			if (cur_rule != NULL) {
+				pre_cur_rule = cur_rule;
 				cur_rule = cur_rule->next;
+			}
 			else
 				break;
 		}
 		temp = (struct rule *)kmalloc(sizeof(struct rule), GFP_KERNEL);
 		if (copy_from_user((char *)temp, user, t))
 			return -EFAULT;
-		temp->next = cur_rule->next;
-		cur_rule->next = temp;
+		temp->next = cur_rule;
+		pre_cur_rule->next = temp;
 	}
 	printk("%d, %s, %d, %s, %d\n", temp->position, temp->source_ip, temp->source_port,
 		temp->dest_ip, temp->dest_port);
