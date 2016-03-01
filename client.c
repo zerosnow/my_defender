@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <getopt.h>
 #include <fcntl.h>
@@ -35,15 +36,19 @@ void (*button_fun[])(GtkWidget *widget, gpointer *data) = {insert, delete, clear
 const int button_size = 6;
 
 static int cur_position;
+GtkEntryBuffer *buffer[6];
+GtkWidget *radio_button[4];
 
 gint main(int argc, char *argv[]) 
 {
 	GtkWidget *window;
-	GtkWidget *vbox, *button_box, *label_box;
+	GtkWidget *vbox, *button_box, *label_box, *input_box, *radio_box;
 	GtkWidget *scrolled_window;
 	GtkWidget *gtklist;
 	GtkWidget *button;
 	GtkWidget *label;
+	GtkWidget *entry;
+	GSList *radio_group;
 	guint i;
 	
 	gtk_init(&argc, &argv);
@@ -84,6 +89,51 @@ gint main(int argc, char *argv[])
 	gtk_widget_show(gtklist);
 	gtk_signal_connect(GTK_OBJECT(gtklist), "select_child", 
 		GTK_SIGNAL_FUNC(list_select), NULL);
+
+	input_box = gtk_hbox_new(FALSE, 5);
+	//gtk_container_border_width(GTK_CONTAINER(input_box), 5);
+	gtk_box_pack_start(GTK_BOX(vbox), input_box, FALSE, FALSE, 0);
+	gtk_widget_show(input_box);
+
+	for (i=0; i<label_size; i++) {
+		if (i >= 0 && i <= 6) {
+			buffer[i] = gtk_entry_buffer_new("\0", 20);
+			entry = gtk_entry_new_with_buffer(buffer[i]);
+			gtk_misc_set_alignment(GTK_MISC(entry), 0.5, 0.5);
+			gtk_entry_set_width_chars(GTK_ENTRY(entry), label_width[i]-2);
+			gtk_box_pack_start(GTK_BOX(input_box), entry, TRUE, TRUE, 0);
+			gtk_widget_show(entry);
+		}
+		else {
+			switch(i) {
+				case 7:
+				radio_box = gtk_vbox_new(TRUE, 5);
+				gtk_box_pack_start(GTK_BOX(input_box), radio_box, TRUE, TRUE, 0);
+				gtk_widget_show(radio_box);
+				radio_button[0] = gtk_radio_button_new_with_label(NULL, time_rule[0]);
+				radio_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(radio_button[0]));
+				radio_button[1] = gtk_radio_button_new_with_label(radio_group, time_rule[1]);
+				gtk_box_pack_start(GTK_BOX(radio_box), radio_button[0], TRUE, TRUE, 0);
+				gtk_box_pack_start(GTK_BOX(radio_box), radio_button[1], TRUE, TRUE, 0);
+				gtk_widget_show(radio_button[0]);
+				gtk_widget_show(radio_button[1]);
+				break;
+				case 8:
+				radio_box = gtk_vbox_new(TRUE, 5);
+				gtk_box_pack_start(GTK_BOX(input_box), radio_box, TRUE, TRUE, 0);
+				gtk_widget_show(radio_box);
+				radio_button[2] = gtk_radio_button_new_with_label(NULL, act[0]);
+				radio_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(radio_button[2]));
+				radio_button[3] = gtk_radio_button_new_with_label(radio_group, act[1]);
+				gtk_box_pack_start(GTK_BOX(radio_box), radio_button[2], TRUE, TRUE, 0);
+				gtk_box_pack_start(GTK_BOX(radio_box), radio_button[3], TRUE, TRUE, 0);
+				gtk_widget_show(radio_button[2]);
+				gtk_widget_show(radio_button[3]);
+				break;
+				default: break;
+			}
+		}
+	}
 
 	button_box = gtk_hbox_new(TRUE, 5);
 	gtk_container_border_width(GTK_CONTAINER(button_box), 5);
@@ -160,12 +210,32 @@ void update_list(GtkList *gtklist)
 
 void insert(GtkWidget *widget, gpointer *data)
 {
+	int i;
 	int kern_fd;
+	struct rule temp;
 
 	if ((kern_fd = open(devicename, O_RDWR)) < 0) printf("%s open error\n", devicename);
-
-	write(kern_fd, &rules[0], sizeof(struct rule));
-	write(kern_fd, &rules[1], sizeof(struct rule));
+	// write(kern_fd, &rules[0], sizeof(struct rule));
+	// write(kern_fd, &rules[1], sizeof(struct rule));
+	if (strcmp(gtk_entry_buffer_get_text(buffer[1]), "\0") == 0) temp.position = 0;
+	sscanf(gtk_entry_buffer_get_text(buffer[0]), "%d", &(temp.position));
+	if (strcmp(gtk_entry_buffer_get_text(buffer[1]), "\0") == 0) strcpy(temp.source_ip, IP_ANY);
+	else sscanf(gtk_entry_buffer_get_text(buffer[1]), "%s", temp.source_ip);
+	if (strcmp(gtk_entry_buffer_get_text(buffer[2]), "\0") == 0) temp.source_port = 0;
+	sscanf(gtk_entry_buffer_get_text(buffer[2]), "%d", &(temp.source_port));
+	if (strcmp(gtk_entry_buffer_get_text(buffer[3]), "\0") == 0) strcpy(temp.dest_ip, IP_ANY);
+	else sscanf(gtk_entry_buffer_get_text(buffer[3]), "%s", temp.dest_ip);
+	if (strcmp(gtk_entry_buffer_get_text(buffer[4]), "\0") == 0) temp.dest_port = 0;
+	sscanf(gtk_entry_buffer_get_text(buffer[4]), "%d", &(temp.dest_port));
+	if (strcmp(gtk_entry_buffer_get_text(buffer[5]), "tcp") == 0) temp.protocol = PROTOCOL_TCP;
+	else temp.protocol = PROTOCOL_ANY;
+	if (strcmp(gtk_entry_buffer_get_text(buffer[6]), "\0") == 0) strcpy(temp.interface, "eth0");
+	sscanf(gtk_entry_buffer_get_text(buffer[6]), "%s", temp.interface);
+	if (gtk_toggle_button_get_active((GtkToggleButton *)radio_button[1])) temp.time_rule = TIME_WORK;
+	else temp.time_rule = TIME_ANY;
+	if (gtk_toggle_button_get_active((GtkToggleButton *)radio_button[2])) temp.act = ACT_REJECT;
+	else temp.act = ACT_PERMIT;
+	write(kern_fd, &temp, sizeof(struct rule));
 
 	close(kern_fd);
 	update_list((GtkList *)data);
@@ -233,6 +303,7 @@ void load_from_file(GtkWidget *widget, gpointer *data)
 	int kern_fd;
 	struct rule temp;
 
+	clear(widget, data);
 	if ((kern_fd = open(devicename, O_RDWR)) < 0) printf("%s open error\n", devicename);
 	if ((store_fd = fopen(filename, "r" )) == NULL) printf("%s open error\n", filename);
 

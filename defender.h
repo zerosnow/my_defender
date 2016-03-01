@@ -16,7 +16,7 @@
 #define ACT_DEL 2
 #define ACT_CLEAR 3
 
-#define  PORT_ANY 0
+#define PORT_ANY 0
 #define IP_ANY "any"
 #define IF_ANY "any"
 
