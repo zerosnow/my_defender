@@ -312,6 +312,7 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 			return -EFAULT;
 		rules_head = temp;
 		temp->next = cur_rule;
+		temp->position = 0;
 	}
 	else {
 		//如果要写入的位置超过了规则数则写入最后一个
@@ -328,6 +329,7 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 			return -EFAULT;
 		temp->next = cur_rule;
 		pre_cur_rule->next = temp;
+		temp->position = pre_cur_rule->position+1;
 	}
 	printk("%d, %s, %d, %s, %d\n", temp->position, temp->source_ip, temp->source_port,
 		temp->dest_ip, temp->dest_port);

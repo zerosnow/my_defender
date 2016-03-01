@@ -1,43 +1,5 @@
-#include <gtk/gtk.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <getopt.h>
-#include <fcntl.h>
-#include <sys/file.h>
+#include "client.h"
 #include "defender.h"
-
-void list_select(GtkList *gtklist, GtkWidget *child);
-void update_list(GtkList *gtklist);
-void insert(GtkWidget *widget, gpointer *data);
-void delete(GtkWidget *widget, gpointer *data);
-void clear(GtkWidget *widget, gpointer *data);
-void store_to_file(GtkWidget *widget, gpointer *data);
-void load_from_file(GtkWidget *widget, gpointer *data);
-void closes(GtkWidget *widget, gpointer *data);
-
-struct rule rules[] = {
-	{0, IP_ANY, PORT_ANY, "119.75.218.0/24", 80, PROTOCOL_ANY,  "eth0", TIME_ANY, ACT_PERMIT},
-	{1, "119.75.218.0/24", 80, IP_ANY, PORT_ANY, PROTOCOL_ANY, "eth0", TIME_ANY, ACT_PERMIT},
-};
-
-static char *protocol[] = {"any", "tcp"};
-static char *time_rule[] = {"any", "work"};
-static char *act[] = {"reject", "permit"};
-static char *filename = "rule";
-static char *devicename = "/dev/myDevice";
-
-char *labels[] = {"position", "source_ip", "source_port", "dest_ip", "dest_port", "protocol", "interface", "time_rule", "act"};
-int label_width[] = {10, 20, 10, 20, 10, 10, 10, 10, 10};
-const int label_size = 9;
-
-char *buttons[] = {"insert", "delete", "clear", "store to file", "load fromfile", "closes"};
-void (*button_fun[])(GtkWidget *widget, gpointer *data) = {insert, delete, clear, store_to_file, load_from_file, closes};
-const int button_size = 6;
-
-static int cur_position;
-GtkEntryBuffer *buffer[6];
-GtkWidget *radio_button[4];
 
 gint main(int argc, char *argv[]) 
 {
