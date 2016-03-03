@@ -6,7 +6,7 @@ gint main(int argc, char *argv[])
 	GtkWidget *window;
 	GtkWidget *vbox, *button_box, *label_box, *input_box, *radio_box;
 	GtkWidget *scrolled_window;
-	GtkWidget *gtklist;
+	GtkWidget *gtklist, *log_gtklist;
 	GtkWidget *button;
 	GtkWidget *label;
 	GtkWidget *entry;
@@ -97,6 +97,22 @@ gint main(int argc, char *argv[])
 		}
 	}
 
+	label = gtk_label_new("reject log :");
+	gtk_misc_set_alignment(GTK_MISC(label), 0, 0.5);
+	gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
+	gtk_widget_show(label);
+
+	scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+	gtk_widget_set_usize(scrolled_window, 250, 150);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
+		GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_box_pack_start(GTK_BOX(vbox), scrolled_window, TRUE, TRUE, 0);
+	gtk_widget_show(scrolled_window);
+
+	log_gtklist = gtk_list_new();
+	gtk_scrolled_window_add_with_viewport(GTK_SCROLLED_WINDOW(scrolled_window), log_gtklist);
+	gtk_widget_show(log_gtklist);
+
 	button_box = gtk_hbox_new(TRUE, 5);
 	gtk_container_border_width(GTK_CONTAINER(button_box), 5);
 	gtk_box_pack_start(GTK_BOX(vbox), button_box, FALSE, FALSE, 0);
@@ -105,8 +121,14 @@ gint main(int argc, char *argv[])
 	for (i=0; i<button_size; i++) {
 		button = gtk_button_new_with_label(buttons[i]);
 		gtk_box_pack_start(GTK_BOX(button_box), button, TRUE, TRUE, 0);
-		gtk_signal_connect(GTK_OBJECT(button), "clicked", 
-			GTK_SIGNAL_FUNC(button_fun[i]), (gpointer *)gtklist);
+		if (i == 5) {
+			gtk_signal_connect(GTK_OBJECT(button), "clicked", 
+				GTK_SIGNAL_FUNC(button_fun[i]), (gpointer *)log_gtklist);
+		}
+		else {
+			gtk_signal_connect(GTK_OBJECT(button), "clicked", 
+				GTK_SIGNAL_FUNC(button_fun[i]), (gpointer *)gtklist);
+		}
 		gtk_widget_show(button);
 	}
 
@@ -168,6 +190,33 @@ void update_list(GtkList *gtklist)
 	}
 	g_print("update_list\n");
 	close(kern_fd);
+}
+
+void print_log(GtkWidget *widget, gpointer *data)
+{
+	int kern_fd;
+	int i;
+	struct record temp;
+	GtkWidget *list_item;
+	GtkWidget *log_label;
+
+	if ((kern_fd = open(devicename, O_RDWR)) < 0) printf("%s open error\n", devicename);
+	temp.is_get_record = -1;
+	temp.begin = 0;
+	temp.end = 0;
+	if (read(kern_fd, &temp, sizeof(temp.logs))<0)
+		return;
+	close(kern_fd);
+	gtk_list_clear_items(((GtkList *)data), 0 , -1);
+	for (i = temp.begin; i < temp.end; i++) {
+		list_item = gtk_list_item_new();
+		log_label = gtk_label_new( temp.logs[i%100]);
+		gtk_container_add(GTK_CONTAINER(list_item), log_label);
+		gtk_misc_set_alignment(GTK_MISC(log_label), 0, 0.5);
+		gtk_widget_show(log_label);
+		gtk_container_add(GTK_CONTAINER((GtkList *)data), list_item);
+		gtk_widget_show(list_item);
+	}
 }
 
 void insert(GtkWidget *widget, gpointer *data)

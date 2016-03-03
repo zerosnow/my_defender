@@ -13,6 +13,7 @@ void delete(GtkWidget *widget, gpointer *data);
 void clear(GtkWidget *widget, gpointer *data);
 void store_to_file(GtkWidget *widget, gpointer *data);
 void load_from_file(GtkWidget *widget, gpointer *data);
+void print_log(GtkWidget *widget, gpointer *data);
 void closes(GtkWidget *widget, gpointer *data);
 
 char *protocol[] = {"any", "tcp", "udp", "icmp"};
@@ -25,9 +26,9 @@ char *labels[] = {"position", "source_ip", "source_port", "dest_ip", "dest_port"
 int label_width[] = {10, 20, 10, 20, 10, 10, 10, 10, 10};
 const int label_size = 9;
 
-char *buttons[] = {"insert", "delete", "clear", "store to file", "load fromfile", "closes"};
-void (*button_fun[])(GtkWidget *widget, gpointer *data) = {insert, delete, clear, store_to_file, load_from_file, closes};
-const int button_size = 6;
+char *buttons[] = {"insert", "delete", "clear", "store to file", "load from file",  "print_log", "closes"};
+void (*button_fun[])(GtkWidget *widget, gpointer *data) = {insert, delete, clear, store_to_file, load_from_file, print_log, closes};
+const int button_size = 7;
 
 int cur_position;
 GtkEntryBuffer *buffer[7];

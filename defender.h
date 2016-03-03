@@ -6,7 +6,6 @@
 #define PROTOCOL_UDP 2
 #define PROTOCOL_ICMP 3
 
-
 #define TIME_ANY 0
 #define TIME_WORK 1
 
@@ -27,7 +26,7 @@
 #define FULL_IP_SIZE 20
 #define IF_SIZE 10
 
-
+#define MAX_LOG 100
 
 struct rule {
 	int position;
@@ -40,6 +39,12 @@ struct rule {
 	int time_rule;
 	int act;
 	struct rule *next;
+};
+
+struct record {
+	int is_get_record;		//为-1时读取日志
+	char logs[MAX_LOG][100];
+	int begin, end;
 };
 
 #endif

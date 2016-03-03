@@ -30,6 +30,9 @@ static struct rule *rules_head;
 static int device_num = 0;
 static int mutex = 0;//互斥用
 static char *devName = "myDevice";
+static char logs[MAX_LOG][100];
+static int log_position = 0;
+static bool loop = false;
 
 //用于与netfilter的静态变量
 static struct nf_hook_ops nfho_local_in;
@@ -164,15 +167,19 @@ void print_reject(struct sk_buff *skb) {
 	switch(ip_hdr(skb)->protocol) {
 		case IPPROTO_TCP:
 		thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
-		printk("reject %s %d to %s %d tcp\n", saddr, translate(thead->source), daddr, translate(thead->dest));
+		sprintf(logs[log_position++], "reject %s %d to %s %d tcp", saddr, translate(thead->source), daddr, translate(thead->dest));
 		break;
 		case IPPROTO_UDP:
 		thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
-		printk("reject %s %d to %s %d udp\n", saddr, translate(thead->source), daddr, translate(thead->dest));
+		sprintf(logs[log_position++], "reject %s %d to %s %d udp", saddr, translate(thead->source), daddr, translate(thead->dest));
 		break;
 		case IPPROTO_ICMP:
-		printk("reject %s to %s icmp\n", saddr, daddr);
+		sprintf(logs[log_position++], "reject %s to %s icmp", saddr, daddr);
 		break;
+	}
+	if (log_position >= MAX_LOG) {
+		log_position = 0;
+		loop = true;
 	}
 }
 
@@ -260,6 +267,19 @@ static ssize_t my_read(struct file *file, char __user *user, size_t t, loff_t *f
 {
 	int position = ((struct rule *)user)->position;
 	struct rule *cur_rule = rules_head;
+	if (position == -1) {
+		if (copy_to_user((char *)(((struct record *)user)->logs), (char *)logs, t))
+			return -EFAULT;
+		if (loop) {
+			((struct record *)user)->begin = log_position;
+			((struct record *)user)->end = log_position + 100;
+		}
+		else {
+			((struct record *)user)->begin = 0;
+			((struct record *)user)->end = log_position % 100;
+		}
+		return t;
+	}
 	if (cur_rule == NULL) {
 		printk("sorry, there is no rule now\n");
 		return -EFAULT;
