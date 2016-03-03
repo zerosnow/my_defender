@@ -189,8 +189,11 @@ void insert(GtkWidget *widget, gpointer *data)
 	else sscanf(gtk_entry_buffer_get_text(buffer[3]), "%s", temp.dest_ip);
 	if (strcmp(gtk_entry_buffer_get_text(buffer[4]), "\0") == 0) temp.dest_port = 0;
 	sscanf(gtk_entry_buffer_get_text(buffer[4]), "%d", &(temp.dest_port));
-	if (strcmp(gtk_entry_buffer_get_text(buffer[5]), "tcp") == 0) temp.protocol = PROTOCOL_TCP;
+	if (strcmp(gtk_entry_buffer_get_text(buffer[5]), protocol[1]) == 0) temp.protocol = PROTOCOL_TCP;
+	else if (strcmp(gtk_entry_buffer_get_text(buffer[5]), protocol[2]) == 0) temp.protocol = PROTOCOL_UDP;
+	else if (strcmp(gtk_entry_buffer_get_text(buffer[5]), protocol[3]) == 0) temp.protocol = PROTOCOL_ICMP;
 	else temp.protocol = PROTOCOL_ANY;
+	//printf("%d\n", temp.protocol);
 	if (strcmp(gtk_entry_buffer_get_text(buffer[6]), "\0") == 0) strcpy(temp.interface, "eth0");
 	sscanf(gtk_entry_buffer_get_text(buffer[6]), "%s", temp.interface);
 	if (gtk_toggle_button_get_active((GtkToggleButton *)radio_button[1])) temp.time_rule = TIME_WORK;

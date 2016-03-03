@@ -15,7 +15,7 @@ void store_to_file(GtkWidget *widget, gpointer *data);
 void load_from_file(GtkWidget *widget, gpointer *data);
 void closes(GtkWidget *widget, gpointer *data);
 
-char *protocol[] = {"any", "tcp"};
+char *protocol[] = {"any", "tcp", "udp", "icmp"};
 char *time_rule[] = {"any", "work"};
 char *act[] = {"reject", "permit"};
 char *filename = "rule";

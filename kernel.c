@@ -104,10 +104,12 @@ bool check_ip_packet(struct sk_buff *skb, const char *source_ip, const char *des
 	return true;
 }
 
-//是tcp协议返回真，否则返回假
-bool check_tcp(struct sk_buff *skb, int protocol) {
+//协议正确返回真，否则返回假
+bool check_protocol(struct sk_buff *skb, int protocol) {
 	if (!ip_hdr(skb)) return false;
 	if (protocol == PROTOCOL_TCP && ip_hdr(skb)->protocol != IPPROTO_TCP) return false;
+	if (protocol == PROTOCOL_UDP && ip_hdr(skb)->protocol != IPPROTO_UDP) return false;
+	if (protocol == PROTOCOL_ICMP && ip_hdr(skb)->protocol != IPPROTO_ICMP) return false;
 	return true;
 }
 
@@ -115,7 +117,7 @@ bool check_tcp(struct sk_buff *skb, int protocol) {
 bool check_port(struct sk_buff *skb, int source_port, int dest_port) {
 	struct tcphdr *thead;
 	if (!(ip_hdr(skb))) return false;
-	if (ip_hdr(skb)->protocol != IPPROTO_TCP) return true;
+	if ((ip_hdr(skb)->protocol != IPPROTO_TCP) && (ip_hdr(skb)->protocol != IPPROTO_UDP)) return true;
 	thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
 	//printk("source_port:%d, dest_port:%d, %d, %d\n", translate(thead->source), translate(thead->dest), source_port, dest_port);
 	//printk("%x,%x\n", ip_hdr(skb)->saddr, ip_hdr(skb)->daddr);
@@ -164,7 +166,7 @@ unsigned int hook_local(const struct nf_hook_ops *ops,
 	if (!skb) return NF_DROP;
 	while(cur_rule != NULL) {
 		if ( (check_ip_packet(skb, cur_rule->source_ip, cur_rule->dest_ip) == true) &&
-			 (check_tcp(skb, cur_rule->protocol) == true) &&
+			 (check_protocol(skb, cur_rule->protocol) == true) &&
 			 (check_port(skb, cur_rule->source_port, cur_rule->dest_port) == true) &&
 			 (check_time(cur_rule->time_rule) == true) &&
 			 (check_interface(in, out, cur_rule->interface, ops->hooknum) == true) ) {

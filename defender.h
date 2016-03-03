@@ -3,6 +3,9 @@
 
 #define PROTOCOL_ANY 0
 #define PROTOCOL_TCP 1
+#define PROTOCOL_UDP 2
+#define PROTOCOL_ICMP 3
+
 
 #define TIME_ANY 0
 #define TIME_WORK 1
