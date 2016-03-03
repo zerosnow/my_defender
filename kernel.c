@@ -52,6 +52,10 @@ unsigned int inet_addr(char *str) {
 	return *(unsigned int *)arr;
 }
 
+void arr_to_addr(const unsigned int arr, char *str) {
+	sprintf(str, "%d.%d.%d.%d", arr & 0xff, (arr>>8) & 0xff, (arr>>16) & 0xff, (arr>>24) & 0xff);
+}
+
 //short大端小端存储互相转换
 unsigned short translate(unsigned short source) {
 	return ((source<<8) & 0xff00) | ((source>>8) & 0xff);
@@ -81,7 +85,6 @@ bool check_ip_packet(struct sk_buff *skb, const char *source_ip, const char *des
 	int source_mask, dest_mask;
 	if (strcmp(source_ip, IP_ANY) != 0) {
 		if ((source_mask = mask_find(source_ip, source_sip)) != -1) {//存在子网掩码
-			//printk("source:%x, %x, %s\n", ip_hdr(skb)->saddr, inet_addr(source_sip), (dest_ip));
 			if ((ip_hdr(skb)->saddr & (~((~0)<<source_mask))) != inet_addr(source_sip)) 
 				return false;
 		}
@@ -92,7 +95,6 @@ bool check_ip_packet(struct sk_buff *skb, const char *source_ip, const char *des
 	}
 	if (strcmp(dest_ip, IP_ANY) != 0) {
 		if ((dest_mask = mask_find(dest_ip, dest_sip)) != -1) {//存在子网掩码
-			//printk("dest:%x, %x, %d\n", ip_hdr(skb)->daddr & (~((~0)<<dest_mask)), inet_addr(dest_sip), dest_mask);
 			if ((ip_hdr(skb)->daddr & (~((~0)<<dest_mask))) != inet_addr(dest_sip)) 
 				return false;
 		}
@@ -119,8 +121,6 @@ bool check_port(struct sk_buff *skb, int source_port, int dest_port) {
 	if (!(ip_hdr(skb))) return false;
 	if ((ip_hdr(skb)->protocol != IPPROTO_TCP) && (ip_hdr(skb)->protocol != IPPROTO_UDP)) return true;
 	thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
-	//printk("source_port:%d, dest_port:%d, %d, %d\n", translate(thead->source), translate(thead->dest), source_port, dest_port);
-	//printk("%x,%x\n", ip_hdr(skb)->saddr, ip_hdr(skb)->daddr);
 	if (source_port !=PORT_ANY && translate(thead->source) != source_port) return false;
 	if (dest_port !=PORT_ANY && translate(thead->dest) != dest_port) return false;
 	return true;
@@ -132,7 +132,6 @@ bool check_time(int time_rule) {
 	if (time_rule == TIME_WORK) {
 		do_gettimeofday(&timex);
 		rtc_time_to_tm(timex.tv_sec, &cur_time);
-		//printk("%d, %d\n", cur_time.tm_hour, cur_time.tm_min);
 		if (cur_time.tm_hour >= WORK_END - TIME_LAG || cur_time.tm_hour < WORK_BEGIN - TIME_LAG) {
 			printk("now isnot work time!\n");
 			return false;
@@ -155,6 +154,28 @@ bool check_interface(const struct net_device *in, const struct net_device *out, 
 	}
 }
 
+void print_reject(struct sk_buff *skb) {
+	char saddr[20];
+	char daddr[20];
+	struct tcphdr *thead;
+	if (!(ip_hdr(skb))) return ;
+	arr_to_addr(ip_hdr(skb)->saddr, saddr);
+	arr_to_addr(ip_hdr(skb)->daddr, daddr);
+	switch(ip_hdr(skb)->protocol) {
+		case IPPROTO_TCP:
+		thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
+		printk("reject %s %d to %s %d tcp\n", saddr, translate(thead->source), daddr, translate(thead->dest));
+		break;
+		case IPPROTO_UDP:
+		thead = (struct tcphdr *)(skb->data + (ip_hdr(skb)->ihl * 4));
+		printk("reject %s %d to %s %d udp\n", saddr, translate(thead->source), daddr, translate(thead->dest));
+		break;
+		case IPPROTO_ICMP:
+		printk("reject %s to %s icmp\n", saddr, daddr);
+		break;
+	}
+}
+
 //同时用在本机的入口和出口的钩子函数
 unsigned int hook_local(const struct nf_hook_ops *ops,
 		struct sk_buff *skb, 
@@ -171,10 +192,14 @@ unsigned int hook_local(const struct nf_hook_ops *ops,
 			 (check_time(cur_rule->time_rule) == true) &&
 			 (check_interface(in, out, cur_rule->interface, ops->hooknum) == true) ) {
 			if (cur_rule->act == ACT_PERMIT) return NF_ACCEPT;
-			else return NF_DROP;
+			else {
+				print_reject(skb);
+				return NF_DROP;
+			}
 		}
 		cur_rule = cur_rule->next;
 	}
+	print_reject(skb);
 	return NF_DROP;
 }
 
@@ -188,7 +213,6 @@ static int kexec_test_init(void)
 		printk("regist failure!\n");
 		return -1;
 	}
-	printk("the device has been registered!\n");
 	device_num = ret;
 	printk("the virtual device's major number %d.\n", device_num);
 
@@ -207,7 +231,6 @@ static int kexec_test_init(void)
 	nf_register_hook(&nfho_local_in);
 	nf_register_hook(&nfho_local_out);
 	
-	printk("nf registered!\n");
 	return 0;
 }
 
@@ -216,7 +239,6 @@ static void kexec_test_exit(void)
 	unregister_chrdev(device_num, devName);
 	nf_unregister_hook(&nfho_local_in);
 	nf_unregister_hook(&nfho_local_out);
-	printk("unregister success!\n");
 }
 
 static int my_open(struct inode *inode, struct file *file)
@@ -333,8 +355,6 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 		pre_cur_rule->next = temp;
 		temp->position = pre_cur_rule->position+1;
 	}
-	printk("%d, %s, %d, %s, %d\n", temp->position, temp->source_ip, temp->source_port,
-		temp->dest_ip, temp->dest_port);
 	while(temp->next != NULL) {
 		temp = temp->next;
 		temp->position++;
