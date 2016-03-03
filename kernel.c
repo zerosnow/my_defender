@@ -291,7 +291,7 @@ static ssize_t my_write(struct file *file, const char __user *user, size_t t, lo
 	}
 	if (act == ACT_DEL) {
 		if (cur_rule == NULL) {
-			printk("no rule can be del");
+			printk("no rule can be del\n");
 			return -EFAULT;
 		}
 		//如果只有一条规则则直接删除

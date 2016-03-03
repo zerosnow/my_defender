@@ -30,5 +30,5 @@ void (*button_fun[])(GtkWidget *widget, gpointer *data) = {insert, delete, clear
 const int button_size = 6;
 
 int cur_position;
-GtkEntryBuffer *buffer[6];
+GtkEntryBuffer *buffer[7];
 GtkWidget *radio_button[4];

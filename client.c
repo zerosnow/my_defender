@@ -179,7 +179,7 @@ void insert(GtkWidget *widget, gpointer *data)
 	if ((kern_fd = open(devicename, O_RDWR)) < 0) printf("%s open error\n", devicename);
 	// write(kern_fd, &rules[0], sizeof(struct rule));
 	// write(kern_fd, &rules[1], sizeof(struct rule));
-	if (strcmp(gtk_entry_buffer_get_text(buffer[1]), "\0") == 0) temp.position = 0;
+	if (strcmp(gtk_entry_buffer_get_text(buffer[0]), "\0") == 0) temp.position = 0;
 	sscanf(gtk_entry_buffer_get_text(buffer[0]), "%d", &(temp.position));
 	if (strcmp(gtk_entry_buffer_get_text(buffer[1]), "\0") == 0) strcpy(temp.source_ip, IP_ANY);
 	else sscanf(gtk_entry_buffer_get_text(buffer[1]), "%s", temp.source_ip);
@@ -200,6 +200,7 @@ void insert(GtkWidget *widget, gpointer *data)
 	else temp.time_rule = TIME_ANY;
 	if (gtk_toggle_button_get_active((GtkToggleButton *)radio_button[2])) temp.act = ACT_REJECT;
 	else temp.act = ACT_PERMIT;
+
 	write(kern_fd, &temp, sizeof(struct rule));
 
 	close(kern_fd);
